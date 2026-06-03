@@ -55,8 +55,8 @@ class DiscordRequestHandlers:
             # Иначе берем все текстовые каналы сервера
             channels_to_process = guild.text_channels
 
-        # Собираем результаты
-        results = []
+        # Собираем результаты конкурентно
+        tasks = []
         for channel in channels_to_process:
             sub_request = Request.create(
                 "get_channel_activity", 
@@ -64,9 +64,11 @@ class DiscordRequestHandlers:
                 from_time=from_time,
                 to_time=to_time,
             )
-            # Вызываем напрямую. Внутри get_channel_activity сработает семафор
-            results.append(await self.get_channel_activity(sub_request))
-            await asyncio.sleep(0.05) # Даем Discord передохнуть
+            tasks.append(self.get_channel_activity(sub_request))
+        
+        # Вызываем через gather. Семафор внутри get_channel_activity (5 параллельных)
+        # обеспечит защиту от 429, но позволит обрабатывать каналы быстрее.
+        results = await asyncio.gather(*tasks)
         
         # --- Агрегация данных ---
         server_pie = {} # Итоговый распределительный пирог (агрегированный)

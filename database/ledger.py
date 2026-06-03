@@ -51,13 +51,20 @@ class Ledger:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             await self.connection.execute("ROLLBACK")
-        else:
+            return False # Пробрасываем исключение дальше
+        
+        try:
+            # Пытаемся сбросить изменения в БД
             await self.flusher.flush(self._new, self.identity_map.all_objects(), self.tracker)
             await self.connection.execute("COMMIT")
             
-            # Рассылаем события ТОЛЬКО после успешного коммита в основную базу
+            # Рассылаем события ТОЛЬКО после успешного коммита
             if self.event_bus and self._events:
                 await self.event_bus.dispatch(self._events)
+        except Exception as e:
+            # Если flush или commit упали, обязательно откатываемся
+            await self.connection.execute("ROLLBACK")
+            raise e
 
 class Database:
     def __init__(self, db_path: str, event_bus: Optional[EventBus] = None, system_bus: Optional[SystemBus] = None):
