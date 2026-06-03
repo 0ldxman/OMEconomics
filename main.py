@@ -1,5 +1,6 @@
 import asyncio
 import os
+from dotenv import load_dotenv
 from database.ledger import Database
 from database.schema import SchemaManager
 from system_bus.bus import SystemBus
@@ -7,6 +8,9 @@ from bot.core import run_bot
 from dashboard.core import run_dashboard
 
 async def main():
+    # 0. Загрузка переменных окружения
+    load_dotenv()
+
     # 1. Инициализация системной шины
     system_bus = SystemBus()
 
