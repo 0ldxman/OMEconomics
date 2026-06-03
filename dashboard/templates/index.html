@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% set active_page = 'index' %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-title">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+            <div style="width: 24px; height: 24px; background: var(--accent-fire); border-radius: 4px;"></div>
+            <h1 style="margin-bottom: 0;">OMEconomics</h1>
+        </div>
+        <p>Глобальный мониторинг транс-серверной системы</p>
+    </div>
+</div>
+
+<!-- Stats Row 1 -->
+<div class="stats-container">
+    <div class="stat-card">
+        <div class="stat-label">
+            <i data-lucide="server" class="text-fire"></i> Серверов в сети
+        </div>
+        <div class="stat-value">{{ servers_count|default(12) }}</div>
+        <div class="stat-subtext">
+            <span class="text-success"><i data-lucide="arrow-up"></i> +2</span> за неделю
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">
+            <i data-lucide="users"></i> Уникальные пользователи
+        </div>
+        <div class="stat-value">{{ total_users|default(1458) }}</div>
+        <div class="stat-subtext">
+            <span class="text-success">{{ active_users|default(842) }} активны</span>
+            <span style="margin: 0 4px;">/</span>
+            <span class="text-danger">{{ inactive_users|default(616) }} неактивны</span>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">
+            <i data-lucide="coins" class="text-fire"></i> Общая валюта
+        </div>
+        <div class="stat-value">{{ "{:,.0f}".format(total_money|default(2450000)) }}</div>
+        <div class="stat-subtext">
+            Средний баланс: {{ "{:,.0f}".format((total_money|default(2450000) / (total_users|default(1458)))|default(0)) }}
+        </div>
+    </div>
+
+    <!-- Gold & Donators Redesigned -->
+    <div class="stat-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+            <div>
+                <div class="stat-label" style="margin-bottom: 4px;">
+                    <i data-lucide="gem" style="color: #ffd700;"></i> Золотой запас
+                </div>
+                <div class="stat-value" style="font-size: 24px;">{{ "{:,.1f}".format(total_gold|default(450.5)) }} 🟡</div>
+            </div>
+            <div style="text-align: right;">
+                <div class="stat-label" style="margin-bottom: 4px;">Меценаты</div>
+                <div style="display: flex; gap: -8px; flex-direction: row-reverse; justify-content: flex-end;">
+                    {% set donators = top_donators|default([{'name': 'Nero'}, {'name': 'Shadow'}, {'name': 'Alex'}]) %}
+                    {% for donator in donators[:3] %}
+                    <div title="{{ donator.name }}" style="
+                        width: 32px; 
+                        height: 32px; 
+                        border-radius: 50%; 
+                        background: var(--bg-item-hover); 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        font-size: 12px; 
+                        font-weight: 800; 
+                        border: 2px solid var(--bg-card);
+                        margin-left: -10px;
+                        color: var(--accent-solid);
+                        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+                    ">
+                        {{ donator.name[0] }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="stat-subtext" style="border-top: 1px solid var(--border-main); pt: 12px; margin-top: 0;">
+            Резерв ЦБ: <span class="text-fire" style="font-weight: 700;">85%</span> покрытия
+        </div>
+    </div>
+</div>
+
+<!-- Layout: Pie + Top Servers -->
+<div class="content-layout" style="grid-template-columns: 1.2fr 1fr;">
+    <div class="section-card">
+        <div class="section-header">
+            <h2><i data-lucide="pie-chart" class="text-fire"></i> Распределение эмиссии</h2>
+        </div>
+        <div id="emission-pie-chart" style="height: 320px;"></div>
+    </div>
+
+    <div class="section-card">
+        <div class="section-header">
+            <h2><i data-lucide="trophy" class="text-fire"></i> Топ серверов</h2>
+        </div>
+        <div class="rank-list">
+            {% for server in top_servers|default([
+                {'name': 'RP Universe', 'activity': '14.5k'},
+                {'name': 'Dark City', 'activity': '12.2k'},
+                {'name': 'Cyber Punk', 'activity': '9.8k'},
+                {'name': 'Magic World', 'activity': '7.1k'},
+                {'name': 'Survival X', 'activity': '5.4k'}
+            ]) %}
+            <div class="rank-item">
+                <div class="rank-index">{{ loop.index }}</div>
+                <div class="rank-info">
+                    <div class="rank-name">{{ server.name }}</div>
+                </div>
+                <div class="rank-value text-fire">{{ server.activity }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Activity Chart Below -->
+<div class="section-card" style="margin-bottom: 32px;">
+    <div class="section-header">
+        <h2><i data-lucide="activity" class="text-fire"></i> Глобальная активность</h2>
+    </div>
+    <div id="main-activity-chart" style="height: 350px;"></div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const bg_color = getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim();
+        const text_secondary = '#888888';
+
+        // Main Activity Chart
+        new ApexCharts(document.querySelector("#main-activity-chart"), {
+            chart: {
+                type: 'area',
+                height: 350,
+                animations: { enabled: true },
+                sparkline: { enabled: false }
+            },
+            colors: ['#ff9d00', '#3fb950'],
+            series: [
+                { name: 'Транзакции', data: [31, 40, 28, 51, 42, 109, 100, 120, 80, 95, 110, 140] },
+                { name: 'Сообщения (k)', data: [11, 32, 45, 32, 34, 52, 41, 60, 48, 55, 70, 65] }
+            ],
+            markers: {
+                size: 0, // Прячем маркеры по умолчанию для минимализма
+                hover: { size: 5, strokeWidth: 0 }
+            },
+            legend: {
+                show: true,
+                position: 'top',
+                horizontalAlign: 'right',
+                markers: {
+                    width: 8,
+                    height: 8,
+                    strokeWidth: 0, // УБРАЛИ БЕЛУЮ ОБВОДКУ В ЛЕГЕНДЕ
+                    radius: 12
+                },
+                itemMargin: { horizontal: 15 }
+            },
+            dataLabels: { enabled: false },
+            fill: {
+                type: 'gradient',
+                gradient: { 
+                    shadeIntensity: 1,
+                    opacityFrom: 0.2, 
+                    opacityTo: 0,
+                    stops: [0, 90, 100]
+                }
+            },
+            xaxis: {
+                categories: ['00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'],
+                axisBorder: { show: false },
+                axisTicks: { show: false }
+            }
+        }).render();
+
+        // Emission Pie Chart (Modern Thin Ring)
+        new ApexCharts(document.querySelector("#emission-pie-chart"), {
+            chart: {
+                type: 'donut',
+                height: 320
+            },
+            colors: ['#ff4d00', '#ff7b00', '#ffa600', '#ffcc00', '#222222'],
+            series: [45, 25, 15, 10, 5],
+            labels: ['RP Universe', 'Dark City', 'Cyber Punk', 'Magic World', 'Other'],
+            dataLabels: {
+                enabled: false // Убираем цифры с самого графика
+            },
+            plotOptions: {
+                pie: {
+                    startAngle: -90,
+                    endAngle: 270,
+                    donut: {
+                        size: '85%', // Очень тонкое кольцо
+                        background: 'transparent',
+                        labels: {
+                            show: true,
+                            name: { show: true, color: text_secondary, fontSize: '12px' },
+                            value: { 
+                                show: true, 
+                                color: '#ffffff', 
+                                fontSize: '28px', 
+                                fontWeight: 800,
+                                formatter: (val) => val + '%'
+                            },
+                            total: {
+                                show: true,
+                                label: 'Top Share',
+                                color: text_secondary,
+                                formatter: (w) => w.globals.series[0] + '%'
+                            }
+                        }
+                    }
+                }
+            },
+            stroke: { 
+                show: true, 
+                width: 2, 
+                colors: [bg_color]
+            },
+            legend: { 
+                position: 'bottom',
+                markers: { 
+                    width: 8,
+                    height: 8,
+                    strokeWidth: 0, // УБРАЛИ БЕЛУЮ ОБВОДКУ В ЛЕГЕНДЕ
+                    radius: 12 
+                }
+            }
+        }).render();
+    });
+</script>
+{% endblock %}
