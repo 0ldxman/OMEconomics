@@ -1,11 +1,12 @@
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, TypeVar, Optional
 import uuid
 from economy.commands.base import EconomyCommand
+from economy.commands.transactions import TransferCommand, GiveItems, BurnCommand
 from database.tables import (
-    Server, Server_Channels, Wallet, User, Transaction, Org,
-    Item, Inventory, Task, Deal
+    Server, Server_Channels, Wallet, User, Transaction, Org, Org_Members,
+    Item, Inventory, Task, Task_Workers, Deal, Market_Listing
 )
 from database.ledger import Ledger
 
@@ -175,12 +176,11 @@ class CreateOrg(EconomyCommand[Org]):
         await self.ledger.repository(Org).add(org)
         return org
 
-# 1. CreateItemType (исправлено) -> теперь это CreateItemDefinition
 class CreateItemType(EconomyCommand[Item]):
     def __init__(
         self,
         ledger: Ledger,
-        server_id: int, # Добавлено
+        server_id: int,
         name: str,
         price: float = 0.0,
         description: Optional[str] = None,
@@ -199,8 +199,6 @@ class CreateItemType(EconomyCommand[Item]):
         server = await self.ledger.repository(Server).get(self.server_id)
         if not server:
             raise ValueError(f"Server with id {self.server_id} not found")
-        if self.price <= 1:
-            raise ValueError(f'Item price cannot be lower then 1 coin. Current price: {self.price}')
 
     async def execute(self) -> Item:
         item_data = {
@@ -216,13 +214,12 @@ class CreateItemType(EconomyCommand[Item]):
         await self.ledger.repository(Item).add(item)
         return item
 
-# 2. AddItemToInventory (ранее CreateItem, исправлено)
 class AddItemToInventory(EconomyCommand[Inventory]):
     def __init__(
         self,
         ledger: Ledger,
-        owner_id: int, # -> owner_id (wallet.id)
-        item_type: int, # -> item_type (item.id)
+        owner_id: int, 
+        item_type: int,
         data: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(ledger)
@@ -248,19 +245,17 @@ class AddItemToInventory(EconomyCommand[Inventory]):
         await self.ledger.repository(Inventory).add(inventory_item)
         return inventory_item
 
-# 3. CreateTask (исправлено)
 class CreateTask(EconomyCommand[Task]):
     def __init__(
         self,
         ledger: Ledger,
-        creator_id: int, # -> creator_id (wallet.id)
-        server_id: int, # Добавлено
+        creator_id: int,
+        server_id: int,
         name: str,
         price: float,
         task_id: Optional[str] = None,
         description: Optional[str] = None,
         tags: Optional[List[str]] = None,
-        budget: Optional[float] = None,
     ):
         super().__init__(ledger)
         self.task_id = task_id or uuid.uuid4().hex
@@ -270,7 +265,6 @@ class CreateTask(EconomyCommand[Task]):
         self.description = description
         self.price = price
         self.tags = tags
-        self.budget = budget or price
 
     async def validate(self) -> None:
         creator_wallet = await self.ledger.repository(Wallet).get(self.creator_id)
@@ -280,19 +274,53 @@ class CreateTask(EconomyCommand[Task]):
         server = await self.ledger.repository(Server).get(self.server_id)
         if not server:
             raise ValueError(f"Server with id {self.server_id} not found")
+            
+        listing_fee = server.settings.get("task", {}).get("listing", 0)
+        total_cost = self.price + listing_fee
+
+        if creator_wallet.balance < total_cost:
+            raise ValueError(f"Creator's wallet has insufficient funds. Required: {total_cost} (price + fee), Available: {creator_wallet.balance}")
 
         existing_task = await self.ledger.repository(Task).get(self.task_id)
         if existing_task:
             raise ValueError(f"Task with id {self.task_id} already exists")
 
     async def execute(self) -> Task:
+        server = await self.ledger.repository(Server).get(self.server_id)
+        server_wallet_id = server.wallet_id
+        listing_fee = server.settings.get("task", {}).get("listing", 0)
+
+        # Сжигаем комиссию за размещение
+        if listing_fee > 0:
+            burn_cmd = BurnCommand(
+                ledger=self.ledger,
+                wallet_id=self.creator_id,
+                amount=listing_fee,
+                description=f"Комиссия за размещение задачи {self.task_id}"
+            )
+            await burn_cmd.validate()
+            await burn_cmd.execute()
+
+        # Создаем эскроу-кошелек и переводим на него бюджет задачи
+        escrow_wallet = await CreateWallet(self.ledger).execute()
+        transfer_cmd = TransferCommand(
+            ledger=self.ledger,
+            sender_wallet_id=self.creator_id,
+            receiver_wallet_id=escrow_wallet.id,
+            amount=self.price,
+            server_id=self.server_id,
+            description=f"Резервирование средств для задачи {self.task_id}"
+        )
+        await transfer_cmd.validate()
+        await transfer_cmd.execute()
+
         task_data = {
             "id": self.task_id,
+            "wallet_id": escrow_wallet.id,
             "creator_id": self.creator_id,
             "server_id": self.server_id,
             "name": self.name,
             "price": self.price,
-            "budget": self.budget
         }
         if self.description: task_data["description"] = self.description
         if self.tags: task_data["tags"] = self.tags
@@ -301,27 +329,18 @@ class CreateTask(EconomyCommand[Task]):
         await self.ledger.repository(Task).add(task)
         return task
 
-# 4. CreateDeal (исправлено)
 class CreateDeal(EconomyCommand[Deal]):
     def __init__(
         self,
         ledger: Ledger,
-        side_a_id: int, # -> side_a_id (wallet.id)
-        side_b_id: int, # -> side_b_id (wallet.id)
+        side_a_id: int,
+        side_b_id: int,
         deal_id: Optional[str] = None,
-        side_a_amount: float = 0.0,
-        side_b_amount: float = 0.0,
-        side_a_gold_amount: float = 0.0,
-        side_b_gold_amount: float = 0.0,
     ):
         super().__init__(ledger)
         self.deal_id = deal_id or uuid.uuid4().hex
         self.side_a_id = side_a_id
         self.side_b_id = side_b_id
-        self.side_a_amount = side_a_amount
-        self.side_b_amount = side_b_amount
-        self.side_a_gold_amount = side_a_gold_amount
-        self.side_b_gold_amount = side_b_gold_amount
     
     async def validate(self) -> None:
         side_a_wallet = await self.ledger.repository(Wallet).get(self.side_a_id)
@@ -337,14 +356,167 @@ class CreateDeal(EconomyCommand[Deal]):
             raise ValueError(f"Deal with id {self.deal_id} already exists")
 
     async def execute(self) -> Deal:
+        escrow_wallet = await CreateWallet(self.ledger).execute()
+        
         deal = Deal(
             id=self.deal_id,
+            wallet_id=escrow_wallet.id,
             side_a_id=self.side_a_id,
-            side_b_id=self.side_b_id,
-            side_a_amount=self.side_a_amount,
-            side_b_amount=self.side_b_amount,
-            side_a_gold_amount=self.side_a_gold_amount,
-            side_b_gold_amount=self.side_b_gold_amount
+            side_b_id=self.side_b_id
         )
         await self.ledger.repository(Deal).add(deal)
         return deal
+
+class CreateMarketListing(EconomyCommand[Market_Listing]):
+    def __init__(
+        self,
+        ledger: Ledger,
+        server_id: int,
+        owner_id: int,
+        item_type: int,
+        amount: int,
+        price_per_item: float,
+        listing_id: Optional[str] = None
+    ):
+        super().__init__(ledger)
+        self.server_id = server_id
+        self.owner_id = owner_id
+        self.item_type = item_type
+        self.amount = amount
+        self.price_per_item = price_per_item
+        self.listing_id = listing_id or uuid.uuid4().hex
+
+    async def validate(self) -> None:
+        if self.amount <= 0:
+            raise ValueError("Amount must be positive")
+        if self.price_per_item < 0:
+            raise ValueError("Price must be non-negative")
+
+        # 1. Проверка существования сущностей
+        seller_wallet = await self.ledger.repository(Wallet).get(self.owner_id)
+        if not seller_wallet:
+            raise ValueError(f"Seller wallet with id {self.owner_id} not found")
+            
+        server = await self.ledger.repository(Server).get(self.server_id)
+        if not server:
+            raise ValueError(f"Server with id {self.server_id} not found")
+
+        item_def = await self.ledger.repository(Item).get(self.item_type)
+        if not item_def:
+            raise ValueError(f"Item definition with id {self.item_type} not found")
+
+        # 2. Проверка наличия предметов у продавца
+        seller_items = await self.ledger.repository(Inventory).find().where(
+            (Inventory.owner_id == self.owner_id) & (Inventory.item_type == self.item_type)
+        ).all()
+        if len(seller_items) < self.amount:
+            raise ValueError(f"Insufficient items. Seller has {len(seller_items)}, but requires {self.amount}")
+
+    async def execute(self) -> Market_Listing:
+        listing = Market_Listing(
+            id=self.listing_id,
+            server_id=self.server_id,
+            owner_id=self.owner_id,
+            item_type=self.item_type,
+            amount=self.amount,
+            price_per_item=self.price_per_item
+        )
+        await self.ledger.repository(Market_Listing).add(listing)
+        return listing
+
+class AddOrgMember(EconomyCommand[Org_Members]):
+    def __init__(
+        self,
+        ledger: Ledger,
+        org_id: int,
+        user_id: int,
+        roles: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(ledger)
+        self.org_id = org_id
+        self.user_id = user_id
+        self.roles = roles or {}
+
+    async def validate(self) -> None:
+        org = await self.ledger.repository(Org).get(self.org_id)
+        if not org:
+            raise ValueError(f"Organization with id {self.org_id} not found")
+        
+        user = await self.ledger.repository(User).get(self.user_id)
+        if not user:
+            raise ValueError(f"User with id {self.user_id} not found")
+
+    async def execute(self) -> Org_Members:
+        membership_id = int(uuid.uuid4().int >> 65)
+        member = Org_Members(
+            membership_id=membership_id,
+            org_id=self.org_id,
+            user_id=self.user_id,
+            roles=self.roles
+        )
+        await self.ledger.repository(Org_Members).add(member)
+        return member
+
+class AddServerChannel(EconomyCommand[Server_Channels]):
+    def __init__(
+        self,
+        ledger: Ledger,
+        server_id: int,
+        channel_id: int,
+        channel_type: str = "text-channel",
+        weight: float = 1.0,
+    ):
+        super().__init__(ledger)
+        self.server_id = server_id
+        self.channel_id = channel_id
+        self.channel_type = channel_type
+        self.weight = weight
+
+    async def validate(self) -> None:
+        server = await self.ledger.repository(Server).get(self.server_id)
+        if not server:
+            raise ValueError(f"Server with id {self.server_id} not found")
+        
+        existing_channel = await self.ledger.repository(Server_Channels).get(self.channel_id)
+        if existing_channel:
+            raise ValueError(f"Channel with id {self.channel_id} already registered")
+
+    async def execute(self) -> Server_Channels:
+        channel = Server_Channels(
+            server_id=self.server_id,
+            channel_id=self.channel_id,
+            type=self.channel_type,
+            weight=self.weight
+        )
+        await self.ledger.repository(Server_Channels).add(channel)
+        return channel
+
+class AddTaskWorker(EconomyCommand[Task_Workers]):
+    def __init__(
+        self,
+        ledger: Ledger,
+        task_id: str,
+        worker_id: int,
+    ):
+        super().__init__(ledger)
+        self.task_id = task_id
+        self.worker_id = worker_id
+
+    async def validate(self) -> None:
+        task = await self.ledger.repository(Task).get(self.task_id)
+        if not task:
+            raise ValueError(f"Task with id {self.task_id} not found")
+
+        worker_wallet = await self.ledger.repository(Wallet).get(self.worker_id)
+        if not worker_wallet:
+            raise ValueError(f"Worker wallet with id {self.worker_id} not found")
+
+    async def execute(self) -> Task_Workers:
+        work_id = int(uuid.uuid4().int >> 65)
+        worker = Task_Workers(
+            work_id=work_id,
+            task_id=self.task_id,
+            worker_id=self.worker_id
+        )
+        await self.ledger.repository(Task_Workers).add(worker)
+        return worker

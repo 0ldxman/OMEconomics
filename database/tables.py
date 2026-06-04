@@ -177,13 +177,14 @@ class Transaction_Items:
     transaction_id: int = Column(fk="transaction.id")
     item_id: int = Column(fk="item.id")
 
-@db_table(version=1)
+@db_table(version=2)
 class Task: # Фриланс таблица задач. Здесь люди создают и выполняют задачи друг друга
     id: str = Column(
         primary_key=True,
         on_delete="CASCADE",
         on_update="CASCADE",
     )
+    wallet_id: int = Column(fk="wallet.id")
     name: str = Column(default="Unknown Task")
     creator_id: int = Column(fk="wallet.id")
     server_id: int = Column(fk="server.id")
@@ -194,13 +195,6 @@ class Task: # Фриланс таблица задач. Здесь люди со
     updated_at: datetime = Column(auto_now=True)
     closed_at: datetime = Column(default=None)
     price: float = Column(default=0.0)
-    budget: float = Column(default=0.0)
-
-@db_table(version=1)
-class Task_Payments:
-    task_id: str = Column(fk="task.id")
-    payment_id: int = Column(fk="transaction.id", primary_key=True)
-    type: str = Column(default="worker_reward")
 
 @db_table(version=1)
 class Task_Workers:
@@ -209,34 +203,29 @@ class Task_Workers:
     worker_id: int = Column(fk="wallet.id")
     started_at: datetime = Column(auto_now_add=True)
 
-@db_table(version=1)
+@db_table(version=2)
 class Deal:
     id: str = Column(
         primary_key=True,
         on_delete="CASCADE",
         on_update="CASCADE",
     )
+    wallet_id: int = Column(fk="wallet.id")
     side_a_id: int = Column(fk="wallet.id")
     side_b_id: int = Column(fk="wallet.id")
-    side_a_amount: float = Column(default=0.0)
-    side_b_amount: float = Column(default=0.0)
-    side_a_gold_amount: float = Column(default=0.0)
-    side_b_gold_amount: float = Column(default=0.0)
     created_at: datetime = Column(auto_now_add=True)
     updated_at: datetime = Column(auto_now=True)
     closed_at: datetime = Column(default=None)
 
 @db_table(version=1)
-class Deal_Items:
-    item_record_id: int = Column(primary_key=True)
-    deal_id: str = Column(fk="deal.id")
-    side: str = Column(default="side_a")
-    item_id: int = Column(fk="item.id")
-
-@db_table(version=1)
-class Deal_Events:
-    event_id: int = Column(primary_key=True)
-    deal_id: str = Column(fk="deal.id")
-    side: str = Column()
-    event_type: str = Column()
-    payload: str = Column()
+class Market_Listing:
+    id: str = Column(
+        primary_key=True,
+        on_delete="CASCADE",
+        on_update="CASCADE"
+    )
+    owner_id: int = Column(fk="wallet.id")
+    item_type: int = Column(fk="item.id")
+    server_id: int = Column(fk="server.id")
+    amount: int = Column()
+    price_per_item: float = Column()
