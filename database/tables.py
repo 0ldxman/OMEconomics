@@ -232,3 +232,11 @@ class Deal_Items:
     deal_id: str = Column(fk="deal.id")
     side: str = Column(default="side_a")
     item_id: int = Column(fk="item.id")
+
+@db_table(version=1)
+class Deal_Events:
+    event_id: int = Column(primary_key=True)
+    deal_id: str = Column(fk="deal.id")
+    side: str = Column()
+    event_type: str = Column()
+    payload: str = Column()
