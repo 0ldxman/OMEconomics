@@ -5,7 +5,7 @@ from database.ledger import Database
 from database.schema import SchemaManager
 from system_bus.bus import SystemBus
 from bot.core import run_bot
-from dashboard.core import run_dashboard
+from frontend.core import run_dashboard
 
 async def main():
     # 0. Загрузка переменных окружения
