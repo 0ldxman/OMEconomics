@@ -11,18 +11,38 @@ class Flusher:
     def __init__(self, connection: aiosqlite.Connection):
         self.connection = connection
 
-    async def flush(self, new_objects: List[Any], tracked_objects: List[Any], tracker: 'ChangeTracker'):
+    async def flush(
+        self, 
+        new_objects: List[Any], 
+        tracked_objects: List[Any], 
+        to_delete: List[Any],
+        tracker: 'ChangeTracker'
+    ):
         now = datetime.now()
         
-        # 1. Вставка новых
+        # 1. Удаление
+        for obj in to_delete:
+            await self._delete_object(obj)
+
+        # 2. Вставка новых
         for obj in new_objects:
             await self._insert_object(obj, now, tracker)
 
-        # 2. Обновление существующих
+        # 3. Обновление существующих
         for obj in tracked_objects:
-            if obj in new_objects:
+            if obj in new_objects or obj in to_delete:
                 continue
             await self._update_object(obj, now, tracker)
+
+    async def _delete_object(self, obj: Any):
+        metadata = TableRegistry.get_table(obj.__class__.__name__.lower())
+        if not metadata: return
+
+        pk_col = next(col for col in metadata.columns.values() if col.primary_key)
+        pk_val = getattr(obj, pk_col.name)
+        
+        sql = f"DELETE FROM \"{metadata.name}\" WHERE \"{pk_col.name}\" = ?"
+        await self.connection.execute(sql, [pk_val])
 
     async def _insert_object(self, obj: Any, now: datetime, tracker: 'ChangeTracker'):
         metadata = TableRegistry.get_table(obj.__class__.__name__.lower())

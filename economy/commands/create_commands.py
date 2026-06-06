@@ -201,7 +201,9 @@ class CreateItemType(EconomyCommand[Item]):
             raise ValueError(f"Server with id {self.server_id} not found")
 
     async def execute(self) -> Item:
+        item_id = int(uuid.uuid4().int >> 65)
         item_data = {
+            "id": item_id,
             "server_id": self.server_id,
             "name": self.name,
             "price": self.price,

@@ -85,7 +85,9 @@ class BaseTransaction(EconomyCommand[bool]):
         description: str = "",
         item_ids: Optional[List[int]] = None
     ) -> Transaction:
+        tx_id = int(uuid.uuid4().int >> 65)
         tx = Transaction(
+            id=tx_id,
             transaction_group_id=self.group_id,
             wallet_id=wallet_id,
             type=tx_type,
@@ -98,7 +100,7 @@ class BaseTransaction(EconomyCommand[bool]):
         if item_ids:
             for item_id in item_ids:
                 tx_item = Transaction_Items(
-                    transaction_id=None,
+                    transaction_id=tx_id,
                     item_id=item_id
                 )
                 await self.ledger.repository(Transaction_Items).add(tx_item)

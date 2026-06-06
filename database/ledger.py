@@ -19,6 +19,7 @@ class Ledger:
         self.event_bus = event_bus
         self.system_bus = system_bus
         self._new: List[Any] = []
+        self._to_delete: List[Any] = []
         self._events: List[Event] = []
 
     def repository(self, model_cls: Type[T]) -> Repository[T]:
@@ -30,9 +31,12 @@ class Ledger:
             self._new.append(obj)
 
     def delete(self, obj: Any):
-        """Пометить объект для удаления (будет реализовано в Flusher)."""
-        # Пока просто заглушка для интерфейса
-        pass
+        """Пометить объект для удаления."""
+        if obj not in self._to_delete:
+            self._to_delete.append(obj)
+        # Если объект был в списке новых, убираем его оттуда
+        if obj in self._new:
+            self._new.remove(obj)
 
     def emit(self, event: Event):
         """Добавить событие в очередь для отправки после коммита."""
@@ -55,7 +59,12 @@ class Ledger:
         
         try:
             # Пытаемся сбросить изменения в БД
-            await self.flusher.flush(self._new, self.identity_map.all_objects(), self.tracker)
+            await self.flusher.flush(
+                new_objects=self._new, 
+                tracked_objects=self.identity_map.all_objects(), 
+                to_delete=self._to_delete,
+                tracker=self.tracker
+            )
             await self.connection.execute("COMMIT")
             
             # Рассылаем события ТОЛЬКО после успешного коммита
