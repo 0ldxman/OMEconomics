@@ -3,7 +3,7 @@ import discord
 import asyncio
 import re
 from typing import Dict, Any, Optional, List
-from system_bus.base import on_request, Request
+from backend.system_bus.base import on_request, Request
 
 class DiscordRequestHandlers:
     """

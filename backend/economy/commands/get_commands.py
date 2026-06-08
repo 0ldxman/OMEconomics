@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Dict, Any, List, TypeVar, Optional
 from uuid import UUID
 
-from economy.commands.base import EconomyCommand
-from database.tables import (
+from backend.economy.commands.base import EconomyCommand
+from backend.database.tables import (
     Item,
     Inventory,
     Server,
@@ -19,7 +19,7 @@ from database.tables import (
     Deal,
     Market_Listing
 )
-from database.ledger import Ledger
+from backend.database.ledger import Ledger
 
 T = TypeVar("T")
 

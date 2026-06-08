@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from datetime import datetime
-from database.core import TableRegistry, TableMetadata, Column
+from backend.database.core import TableRegistry, TableMetadata, Column
 
 class SchemaManager:
     def __init__(self, ledger):

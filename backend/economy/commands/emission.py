@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import Dict, Any, List, TypeVar, Optional, Callable, Awaitable
-from economy.commands.base import EconomyCommand
-from database.tables import Server, Server_Channels, Wallet, User, Transaction
-from database.ledger import Ledger
-from economy.commands.create_commands import CreateUser
-from economy.commands.transactions import MintCommand, TransferCommand
+from backend.economy.commands.base import EconomyCommand
+from backend.database.tables import Server, Server_Channels, Wallet, User, Transaction
+from backend.database.ledger import Ledger
+from backend.economy.commands.create_commands import CreateUser
+from backend.economy.commands.transactions import MintCommand, TransferCommand
 import uuid
 import math
 import asyncio

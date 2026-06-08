@@ -2,13 +2,13 @@
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, TypeVar, Optional
 import uuid
-from economy.commands.base import EconomyCommand
-from economy.commands.transactions import TransferCommand, GiveItems, BurnCommand
-from database.tables import (
+from backend.economy.commands.base import EconomyCommand
+from backend.economy.commands.transactions import TransferCommand, GiveItems, BurnCommand
+from backend.database.tables import (
     Server, Server_Channels, Wallet, User, Transaction, Org, Org_Members,
     Item, Inventory, Task, Task_Workers, Deal, Market_Listing
 )
-from database.ledger import Ledger
+from backend.database.ledger import Ledger
 
 class CreateWallet(EconomyCommand[Wallet]):
     def __init__(

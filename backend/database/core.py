@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Type, List, Union
 import inspect
 import json
 from datetime import datetime
-from database.query import ColumnExpression
+from backend.database.query import ColumnExpression
 
 @dataclass
 class Column:

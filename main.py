@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 from dotenv import load_dotenv
-from core.orchestrator import SystemOrchestrator
+from backend.core.orchestrator import SystemOrchestrator
 
 async def main():
     print(">>> ВХОД В main()", flush=True)

@@ -1,8 +1,8 @@
 from typing import Optional, List, Dict
 import uuid
-from economy.commands.base import EconomyCommand
-from database.tables import Wallet, Transaction, Transaction_Items, Server, Inventory
-from database.ledger import Ledger
+from backend.economy.commands.base import EconomyCommand
+from backend.database.tables import Wallet, Transaction, Transaction_Items, Server, Inventory
+from backend.database.ledger import Ledger
 
 class WalletPay(EconomyCommand[bool]):
     """

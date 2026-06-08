@@ -2,7 +2,7 @@ import aiosqlite
 import json
 import os
 from typing import List
-from events.base import Event
+from backend.events.base import Event
 
 class EventStore:
     """Хранилище событий в отдельной базе данных (history.db)."""

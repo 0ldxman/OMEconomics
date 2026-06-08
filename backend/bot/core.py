@@ -1,10 +1,10 @@
 import os
 import pprint
 from datetime import datetime, timedelta
-from database.ledger import Database
-from economy.commands.emission import EmissionCommand
-from economy.commands.get_or_create import GetOrCreateServer
-from database.tables import Server_Channels
+from backend.database.ledger import Database
+from backend.economy.commands.emission import EmissionCommand
+from backend.economy.commands.get_or_create import GetOrCreateServer
+from backend.database.tables import Server_Channels
 
 # Мы не импортируем discord на верхнем уровне, чтобы не вешать систему при сбоях библиотеки
 discord = None

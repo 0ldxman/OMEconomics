@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from database.tables import User, Wallet
-from economy.commands.emission import EmissionCommand
+from backend.economy.commands.emission import EmissionCommand
 
 class EconomyCog(commands.Cog):
     def __init__(self, bot):

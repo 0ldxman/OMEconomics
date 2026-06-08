@@ -1,4 +1,4 @@
-from database.core import db_table, Column
+from backend.database.core import db_table, Column
 from datetime import datetime
 
 @db_table(version=1)

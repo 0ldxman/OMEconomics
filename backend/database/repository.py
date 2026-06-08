@@ -1,8 +1,8 @@
 from typing import Any, Dict, List, Optional, Type, TypeVar, Generic, TYPE_CHECKING
-from database.core import TableRegistry
+from backend.database.core import TableRegistry
 
 if TYPE_CHECKING:
-    from database.ledger import Ledger, QueryBuilder
+    from backend.database.ledger import Ledger, QueryBuilder
 
 T = TypeVar("T")
 

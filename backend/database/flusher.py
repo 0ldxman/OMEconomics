@@ -1,10 +1,10 @@
 from typing import Any, List, TYPE_CHECKING
 import aiosqlite
 from datetime import datetime
-from database.core import TableRegistry
+from backend.database.core import TableRegistry
 
 if TYPE_CHECKING:
-    from database.change_tracker import ChangeTracker
+    from backend.database.change_tracker import ChangeTracker
 
 class Flusher:
     """Компиляция изменений в SQL и их выполнение."""

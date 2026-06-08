@@ -1,6 +1,6 @@
 import datetime
 
-from database.core import db_table, Column
+from backend.database.core import db_table, Column
 
 @db_table(version=1)
 class ServerSnapshots:

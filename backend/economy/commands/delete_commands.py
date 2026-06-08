@@ -1,11 +1,11 @@
 from typing import Optional
 from economy.commands.base import EconomyCommand
-from database.tables import (
+from backend.database.tables import (
     Server, Server_Channels, Wallet, User, Org, Org_Members,
     Item, Inventory, Task, Task_Workers, Deal, Market_Listing,
     Transaction, Transaction_Items
 )
-from database.ledger import Ledger
+from backend.database.ledger import Ledger
 
 class DeleteWallet(EconomyCommand[None]):
     """Удаляет кошелек."""

@@ -1,13 +1,13 @@
 from typing import Any, List, Optional, Type, TypeVar, Generic
 import aiosqlite
 import asyncio
-from database.identity_map import IdentityMap
-from database.change_tracker import ChangeTracker
-from database.flusher import Flusher
-from database.repository import Repository
-from events.bus import EventBus
-from system_bus.bus import SystemBus
-from events.base import Event
+from backend.database.identity_map import IdentityMap
+from backend.database.change_tracker import ChangeTracker
+from backend.database.flusher import Flusher
+from backend.database.repository import Repository
+from backend.events.bus import EventBus
+from backend.system_bus.bus import SystemBus
+from backend.events.base import Event
 
 T = TypeVar("T")
 

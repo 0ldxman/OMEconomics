@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Any
-from database.ledger import Ledger
+from backend.database.ledger import Ledger
 
 T = TypeVar("T")
 

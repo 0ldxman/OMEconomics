@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from database.core import TableMetadata
+from backend.database.core import TableMetadata
 
 class ChangeTracker:
     """Отслеживание изменений объектов через снапшоты."""

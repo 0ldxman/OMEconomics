@@ -1,7 +1,7 @@
-from economy.commands.base import EconomyCommand
-from economy.commands.get_commands import GetWallet, GetUser, GetServer, GetOrg
-from economy.commands.create_commands import CreateWallet, CreateUser, CreateOrg, AddServer
-from database.tables import Wallet, User, Server, Org
+from backend.economy.commands.base import EconomyCommand
+from backend.economy.commands.get_commands import GetWallet, GetUser, GetServer, GetOrg
+from backend.economy.commands.create_commands import CreateWallet, CreateUser, CreateOrg, AddServer
+from backend.database.tables import Wallet, User, Server, Org
 
 class GetOrCreateWallet(EconomyCommand[Wallet]):
     def __init__(self, ledger, wallet_id):

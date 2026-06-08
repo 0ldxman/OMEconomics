@@ -1,6 +1,6 @@
 from typing import List, Callable, Dict, Any, Awaitable
 import asyncio
-from events.base import Event
+from backend.events.base import Event
 
 # Тип для подписчика: асинхронная функция, принимающая список событий
 Handler = Callable[[List[Event]], Awaitable[None]]
