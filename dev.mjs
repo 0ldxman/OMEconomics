@@ -13,8 +13,11 @@ console.log('>>> [Orchestrator] Starting OME Economics System...');
 console.log(`>>> [Orchestrator] Root directory: ${rootDir}`);
 console.log(`>>> [Orchestrator] Frontend directory: ${frontendDir}`);
 
-// Путь к исполняемому файлу Python из виртуального окружения
-const venvPython = path.join(rootDir, '.venv', 'Scripts', 'python.exe');
+// Определяем ОС и задаем правильный путь к Python в venv
+const isWindows = process.platform === 'win32';
+const pythonExecutable = isWindows ? 'python.exe' : 'python';
+const pythonPath = isWindows ? 'Scripts' : 'bin';
+const venvPython = path.join(rootDir, '.venv', pythonPath, pythonExecutable);
 
 // Настройки для процессов
 const spawnOptions = {
