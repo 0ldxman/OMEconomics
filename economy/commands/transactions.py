@@ -122,7 +122,9 @@ class TransferCommand(BaseTransaction):
         items: Optional[Dict[int, int]] = None, # {item_type: count}
         server_id: Optional[int] = None,
         description: str = "Перевод",
-        transaction_group_id: Optional[int] = None
+        transaction_group_id: Optional[int] = None,
+        sender_tag: str = "transfer_out",
+        receiver_tag: str = "transfer_in"
     ):
         super().__init__(ledger, transaction_group_id=transaction_group_id)
         self.sender_id = sender_wallet_id
@@ -132,6 +134,8 @@ class TransferCommand(BaseTransaction):
         self.items = items or {}
         self.server_id = server_id
         self.description = description
+        self.sender_tag = sender_tag
+        self.receiver_tag = receiver_tag
 
     async def validate(self) -> None:
         # 1. Расчет налога для валидации
@@ -190,9 +194,9 @@ class TransferCommand(BaseTransaction):
         # 5. Логирование сторон
         # Отправитель теряет полную сумму (сумма + налог)
         total_spent = self.amount + tax_amount
-        await self._log_tx(self.sender_id, -total_spent, -self.gold_amount, "transfer_out", self.description, all_item_ids)
+        await self._log_tx(self.sender_id, -total_spent, -self.gold_amount, self.sender_tag, self.description, all_item_ids)
         # Получатель получает ровно столько, сколько ему отправили
-        await self._log_tx(self.receiver_id, self.amount, self.gold_amount, "transfer_in", self.description, all_item_ids)
+        await self._log_tx(self.receiver_id, self.amount, self.gold_amount, self.receiver_tag, self.description, all_item_ids)
         
         return True
 
@@ -201,12 +205,13 @@ class MintCommand(BaseTransaction):
     Печать денег (эмиссия). Деньги появляются в системе из ниоткуда.
     Обычно используется только сервером для пополнения своего бюджета.
     """
-    def __init__(self, ledger, wallet_id, amount=0.0, gold_amount=0.0, description="Эмиссия", transaction_group_id=None):
+    def __init__(self, ledger, wallet_id, amount=0.0, gold_amount=0.0, description="Эмиссия", transaction_group_id=None, tag="mint"):
         super().__init__(ledger, transaction_group_id=transaction_group_id)
         self.wallet_id = wallet_id
         self.amount = amount
         self.gold_amount = gold_amount
         self.description = description
+        self.tag = tag
 
     async def validate(self) -> None:
         if self.amount < 0 or self.gold_amount < 0:
@@ -218,7 +223,7 @@ class MintCommand(BaseTransaction):
         wallet = await self.ledger.repository(Wallet).get(self.wallet_id)
         wallet.balance += self.amount
         wallet.gold += self.gold_amount
-        await self._log_tx(self.wallet_id, self.amount, self.gold_amount, "mint", self.description)
+        await self._log_tx(self.wallet_id, self.amount, self.gold_amount, self.tag, self.description)
         return True
 
 class BurnCommand(BaseTransaction):

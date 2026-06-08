@@ -23,6 +23,11 @@ class Condition(Expression):
             if self.operator == "!=":
                 return f"{self.left} IS NOT NULL", []
         
+        # Если оператор уже содержит плейсхолдеры (например, IN (?, ?, ?)), 
+        # то не добавляем лишний "?" и возвращаем список значений как есть.
+        if "?" in self.operator:
+            return f"{self.left} {self.operator}", list(self.right) if isinstance(self.right, (list, tuple)) else [self.right]
+            
         return f"{self.left} {self.operator} ?", [self.right]
 
 class LogicalExpression(Expression):

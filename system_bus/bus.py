@@ -1,16 +1,42 @@
 import asyncio
 import uuid
 import inspect
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List, Callable
 from .base import Request, Handler
 
 class SystemBus:
     """
     Системная шина для прямого взаимодействия компонентов через Request-Response.
+    А также поддержка событийной модели (Pub/Sub).
     """
     def __init__(self):
         self._handlers: Dict[str, Handler] = {}
         self._pending_requests: Dict[str, asyncio.Future] = {}
+        self._event_listeners: Dict[str, List[Callable]] = {}
+
+    def on(self, event_name: str, listener: Callable):
+        """Подписаться на событие."""
+        if event_name not in self._event_listeners:
+            self._event_listeners[event_name] = []
+        self._event_listeners[event_name].append(listener)
+
+    def off(self, event_name: str, listener: Callable):
+        """Отписаться от события."""
+        if event_name in self._event_listeners:
+            if listener in self._event_listeners[event_name]:
+                self._event_listeners[event_name].remove(listener)
+
+    async def emit(self, event_name: str, **data):
+        """Разослать событие всем подписчикам."""
+        if event_name in self._event_listeners:
+            for listener in self._event_listeners[event_name]:
+                try:
+                    if asyncio.iscoroutinefunction(listener):
+                        await listener(event_name, **data)
+                    else:
+                        listener(event_name, **data)
+                except Exception as e:
+                    print(f"Error in event listener {event_name}: {e}")
 
     def subscribe(self, request_type: str, handler: Handler):
         """Прямая подписка функции на запрос."""

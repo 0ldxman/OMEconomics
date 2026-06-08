@@ -1,5 +1,6 @@
 from typing import Any, List, Optional, Type, TypeVar, Generic
 import aiosqlite
+import asyncio
 from database.identity_map import IdentityMap
 from database.change_tracker import ChangeTracker
 from database.flusher import Flusher
@@ -11,8 +12,9 @@ from events.base import Event
 T = TypeVar("T")
 
 class Ledger:
-    def __init__(self, connection: aiosqlite.Connection, event_bus: Optional[EventBus] = None, system_bus: Optional[SystemBus] = None):
+    def __init__(self, connection: aiosqlite.Connection, db_manager: 'Database', event_bus: Optional[EventBus] = None, system_bus: Optional[SystemBus] = None):
         self.connection = connection
+        self.db_manager = db_manager
         self.identity_map = IdentityMap()
         self.tracker = ChangeTracker()
         self.flusher = Flusher(connection)
@@ -53,46 +55,99 @@ class Ledger:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            await self.connection.execute("ROLLBACK")
-            return False # Пробрасываем исключение дальше
-        
         try:
-            # Пытаемся сбросить изменения в БД
-            await self.flusher.flush(
-                new_objects=self._new, 
-                tracked_objects=self.identity_map.all_objects(), 
-                to_delete=self._to_delete,
-                tracker=self.tracker
-            )
-            await self.connection.execute("COMMIT")
+            if exc_type:
+                await self.connection.execute("ROLLBACK")
+                return False # Пробрасываем исключение дальше
             
-            # Рассылаем события ТОЛЬКО после успешного коммита
-            if self.event_bus and self._events:
-                await self.event_bus.dispatch(self._events)
-        except Exception as e:
-            # Если flush или commit упали, обязательно откатываемся
-            await self.connection.execute("ROLLBACK")
-            raise e
+            try:
+                # Пытаемся сбросить изменения в БД
+                await self.flusher.flush(
+                    new_objects=self._new, 
+                    tracked_objects=self.identity_map.all_objects(), 
+                    to_delete=self._to_delete,
+                    tracker=self.tracker
+                )
+                await self.connection.execute("COMMIT")
+                
+                # Рассылаем события ТОЛЬКО после успешного коммита
+                if self.event_bus and self._events:
+                    await self.event_bus.dispatch(self._events)
+            except Exception as e:
+                # Если flush или commit упали, обязательно откатываемся
+                await self.connection.execute("ROLLBACK")
+                raise e
+        finally:
+            # Всегда возвращаем соединение в пул
+            await self.db_manager._release_connection(self.connection)
 
 class Database:
-    def __init__(self, db_path: str, event_bus: Optional[EventBus] = None, system_bus: Optional[SystemBus] = None):
+    def __init__(self, db_path: str, event_bus: Optional[EventBus] = None, system_bus: Optional[SystemBus] = None, max_pool_size: int = 10):
         self.db_path = db_path
         self.event_bus = event_bus
         self.system_bus = system_bus
-        self._conn: Optional[aiosqlite.Connection] = None
+        self.max_pool_size = max_pool_size
+        self._pool: List[aiosqlite.Connection] = []
+        self._lock = asyncio.Lock()
+        self._initialized = False
 
     async def connect(self):
-        self._conn = await aiosqlite.connect(self.db_path)
-        await self._conn.execute("PRAGMA foreign_keys = ON")
-        return self._conn
+        """Инициализация базы данных."""
+        async with self._lock:
+            if not self._initialized:
+                # Проверяем путь и создаем первое соединение для проверки
+                conn = await aiosqlite.connect(self.db_path)
+                await conn.execute("PRAGMA foreign_keys = ON")
+                await conn.execute("PRAGMA journal_mode = WAL")
+                self._pool.append(conn)
+                self._initialized = True
+        return self
 
     async def close(self):
-        if self._conn: await self._conn.close()
+        """Закрытие всех соединений в пуле."""
+        async with self._lock:
+            for conn in self._pool:
+                await conn.close()
+            self._pool.clear()
 
-    def ledger(self) -> Ledger:
-        if not self._conn: raise RuntimeError("Connect first")
-        return Ledger(self._conn, event_bus=self.event_bus, system_bus=self.system_bus)
+    async def _get_connection(self) -> aiosqlite.Connection:
+        async with self._lock:
+            if self._pool:
+                return self._pool.pop()
+        
+        conn = await aiosqlite.connect(self.db_path, timeout=20)
+        await conn.execute("PRAGMA foreign_keys = ON")
+        await conn.execute("PRAGMA journal_mode = WAL")
+        return conn
+
+    async def _release_connection(self, conn: aiosqlite.Connection):
+        async with self._lock:
+            if len(self._pool) < self.max_pool_size:
+                self._pool.append(conn)
+            else:
+                await conn.close()
+
+    def ledger(self) -> 'LedgerContext':
+        return LedgerContext(self)
+
+class LedgerContext:
+    def __init__(self, db_manager: Database):
+        self.db_manager = db_manager
+        self.ledger: Optional[Ledger] = None
+
+    async def __aenter__(self) -> Ledger:
+        conn = await self.db_manager._get_connection()
+        self.ledger = Ledger(
+            conn, 
+            db_manager=self.db_manager, 
+            event_bus=self.db_manager.event_bus, 
+            system_bus=self.db_manager.system_bus
+        )
+        return await self.ledger.__aenter__()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.ledger:
+            await self.ledger.__aexit__(exc_type, exc_val, exc_tb)
 
 class QueryBuilder(Generic[T]):
     """Оставлен для совместимости, но теперь использует Repository."""
@@ -103,6 +158,7 @@ class QueryBuilder(Generic[T]):
         self.expressions = []
         self._order_by = None
         self._limit = None
+        self._offset = None
 
     def where(self, expression: Any) -> 'QueryBuilder[T]':
         self.expressions.append(expression)
@@ -114,6 +170,10 @@ class QueryBuilder(Generic[T]):
 
     def limit(self, count: int) -> 'QueryBuilder[T]':
         self._limit = count
+        return self
+
+    def offset(self, count: int) -> 'QueryBuilder[T]':
+        self._offset = count
         return self
 
     async def all(self) -> List[T]:
@@ -129,11 +189,26 @@ class QueryBuilder(Generic[T]):
             if self._order_by.startswith("-"): sql += f" ORDER BY \"{self._order_by[1:]}\" DESC"
             else: sql += f" ORDER BY \"{self._order_by}\""
         if self._limit: sql += f" LIMIT {self._limit}"
+        if self._offset: sql += f" OFFSET {self._offset}"
             
         async with self.ledger.connection.execute(sql, params) as cursor:
             rows = await cursor.fetchall()
             col_names = [d[0] for d in cursor.description]
             return [self.repository._map_row_to_obj(dict(zip(col_names, r))) for r in rows]
+
+    async def count(self) -> int:
+        where_clauses, params = [], []
+        for expr in self.expressions:
+            s, p = expr.compile()
+            where_clauses.append(s)
+            params.extend(p)
+        
+        sql = f"SELECT COUNT(*) FROM \"{self.metadata.name}\""
+        if where_clauses: sql += f" WHERE {' AND '.join(where_clauses)}"
+            
+        async with self.ledger.connection.execute(sql, params) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
 
     async def first(self) -> Optional[T]:
         self.limit(1)

@@ -1,49 +1,37 @@
 import asyncio
 import os
+import sys
 from dotenv import load_dotenv
-from database.ledger import Database
-from database.schema import SchemaManager
-from system_bus.bus import SystemBus
-from bot.core import run_bot
-from frontend.core import run_dashboard
+from core.orchestrator import SystemOrchestrator
 
 async def main():
-    # 0. Загрузка переменных окружения
+    print(">>> ВХОД В main()", flush=True)
     load_dotenv()
-
-    # 1. Инициализация системной шины
-    system_bus = SystemBus()
-
-    # 2. Инициализация БД
-    db_file = "economy.db"
-    db = Database(db_file, system_bus=system_bus)
-    await db.connect()
-
-    # 2. Синхронизация схемы (автоматическая миграция)
-    async with db.ledger() as ledger:
-        schema = SchemaManager(ledger)
-        await schema.sync_all()
-
-    # 3. Запуск компонентов
-    # В реальной жизни TOKEN берется из .env
-    TOKEN = os.getenv("DISCORD_TOKEN")
     
-    print("Запуск системы...")
+    orchestrator = SystemOrchestrator()
     
-    tasks = [
-        run_dashboard(db)
-    ]
+    # Можно добавить коллбэк для вывода логов оркестратора в консоль (уже есть внутри)
+    # В будущем здесь будет подключение к WebSocket для фронтенда
     
-    # Запускаем бота, если токен не является плейсхолдером
-    if TOKEN and TOKEN != "YOUR_TOKEN_HERE":
-        tasks.append(run_bot(TOKEN, db))
-    else:
-        print("Предупреждение: DISCORD_TOKEN не установлен. Бот не будет запущен.")
-
-    await asyncio.gather(*tasks)
+    try:
+        await orchestrator.boot()
+        
+        # Держим main живым, пока система работает
+        while orchestrator.status != "OFFLINE":
+            await asyncio.sleep(1)
+            
+    except KeyboardInterrupt:
+        print("\nЗавершение работы по требованию пользователя...", flush=True)
+        await orchestrator.shutdown()
+    except Exception as e:
+        print(f"\nНепредвиденная ошибка в оркестраторе: {e}", flush=True)
+        await orchestrator.shutdown()
+    finally:
+        print("Система остановлена.", flush=True)
 
 if __name__ == "__main__":
+    print(">>> СТАРТ __main__", flush=True)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nСистема остановлена.")
+        pass

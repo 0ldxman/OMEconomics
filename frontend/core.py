@@ -4,34 +4,45 @@ import os
 
 async def run_dashboard(db):
     """
-    Запускает Next.js фронтенд (omeweb) в подпроцессе.
+    Запускает Next.js фронтенд (omeweb) максимально легким способом.
     """
-    print("Запуск фронтенда (omeweb)...")
-    
-    # Путь к директории omeweb относительно корня проекта
     frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "omeweb")
     
-    # Команда для запуска (предполагаем npm run dev)
-    # В продакшене это может быть запуск собранного приложения
+    if not os.path.exists(frontend_dir):
+        print(f"[Core] ОШИБКА: Директория фронтенда не найдена: {frontend_dir}", flush=True)
+        return
+
+    # Подготовка переменных окружения
+    env = os.environ.copy()
+    env["NODE_OPTIONS"] = "--max-old-space-size=4096"
+    env["NEXT_TELEMETRY_DISABLED"] = "1"
+    
+    print(f"[Core] Запуск фронтенда в отдельном процессе...", flush=True)
+    
     try:
-        process = await asyncio.create_subprocess_shell(
-            "npm run dev",
+        # Используем классический Popen вместо асинхронного create_subprocess_shell.
+        # Это полностью освобождает Python от управления потоками вывода фронтенда.
+        # shell=True нужен для Windows, чтобы найти npm/npx
+        process = subprocess.Popen(
+            "npx next dev", 
             cwd=frontend_dir,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            env=env,
+            shell=True,
+            # Мы НЕ используем PIPE, чтобы данные шли напрямую в консоль, не нагружая Python
+            stdout=None,
+            stderr=None
         )
         
-        print(f"Фронтенд запущен в директории: {frontend_dir}")
+        print(f"[Core] Фронтенд запущен независимо (PID: {process.pid})", flush=True)
         
-        # Можно добавить логирование вывода, если нужно
-        # Но для начала просто даем ему работать
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode != 0:
-            print(f"Ошибка при запуске дашборда: {stderr.decode()}")
+        # Просто держим корутину живой, пока процесс существует
+        while process.poll() is None:
+            await asyncio.sleep(5)
+            
+        print(f"[Core] Процесс фронтенда завершился.", flush=True)
             
     except Exception as e:
-        print(f"Не удалось запустить дашборд: {e}")
+        print(f"[Core] КРИТИЧЕСКАЯ ОШИБКА при запуске фронтенда: {e}", flush=True)
 
 if __name__ == "__main__":
     # Тестовый запуск
